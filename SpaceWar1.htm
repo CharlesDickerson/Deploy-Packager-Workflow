@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>SpaeWars Three.js</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				font-family: Monospace;
+				background-color: #ffffff;
+				margin: 0px;
+				overflow: hidden;
+			}
+		</style>
+	</head>
+	<body>
+	<div id="ThreeCanvas"> 
+		<script src="JavaScript/three.js"></script>
+		<script src="JavaScript/DDSLoader.js"></script>
+		<script src="JavaScript/MTLLoader.js"></script>
+		<script src="JavaScript/OBJLoader.js"></script>
+		<script src="JavaScript/Detector.js"></script>
+		<script src="JavaScript/AudioLoader.js"></script>
+
+		<script src="JavaScript/stats.min.js"></script>
+		
+		<script type="text/javascript" src="JavaScript/Class.js"></script>
+		<script type="text/javascript" src="JavaScript/Viper.js"></script>
+		<script type="text/javascript" src="JavaScript/Bullet.js"></script>
+		<script type="text/javascript" src="JavaScript/Explode.js"></script>
+		<script type="text/javascript" src="JavaScript/AudioFile.js"></script>
+		
+		<script>
+			var container, stats;
+			var camera, scene, raycaster, renderer, earthMesh;
+			var mouse = new THREE.Vector2(), INTERSECTED;
+			var radius = 100, theta = 0;
+
+			var Rotation = new Array();
+		    var ThrustVector = new Array();
+
+		    var CameraAngleX = 0;
+		    var CameraAngleY = 0;
+		    var CameraAngleZ = 0;
+		    var RotationDragRate = 0.0005;
+		    var XYChangeRate = 0.001;
+		    var MaxRotation = 0.008;
+		    var ZChangeRate = 0.005;
+		    var Thrust = 0.1;
+		    var MaxThrust = 5;
+		    var DragRate = 0.5;
+		    
+		    var CurrentX = 0;
+		    var CurrentY = 0;
+		    var CurrentZ = -200;
+		    
+		    var CurserX = 0;
+		    var CurserY = 0;
+		    var Pause = true;
+		    
+		    var BulletLife = 10000;
+		    var BulletFireRate = 20;
+		    var BulletFireRateCount = 0;
+		    var zBulletSpeed = 100;
+		    var Fire = false;
+		    var Deg90 = Math.PI/2;
+		    var AudioFire, AudioExplode;
+		    
+		    var StarArray = new Array();
+		    var ModelArray = new Array();
+		    var BulletArray = new Array();
+		    var ExplodeArray = new Array();
+		    var BulletAngleX, BulletAngleZ;
+		    var AudioFireArray = new Array();
+		    var indexAudioFireArray = 0;
+		    var AudioExplodeArray = new Array();
+		    var indexAudioExplodeArray = 0;
+
+		    var bufferStarship, bufferStarship1, bufferStarship2, bufferStarship3, Starship;
+		    var TargetSpeed = 10;
+		    var TargetGenRate = 1.0;
+		    var TargetGenRateCount = 0;
+		    var TargetLife = -10000;
+		    
+		    var currentlyPressedKeys = {};
+
+	
+
+			
+			init();
+
+			
+		    function TargetInit() {
+		    	//var Starship = bufferStarship3.clone();
+				//var Starship = bufferStarship2.clone();
+				//var Starship = bufferStarship1.clone();
+		    	
+				switch( Math.ceil(Math.random() * 3 ) ) {
+				case 4:
+					var Starship = bufferStarship.clone();
+					break;
+				case 2:
+					var Starship = bufferStarship2.clone();
+					break;
+				case 3:
+					var Starship = bufferStarship3.clone();
+					break;
+				case 1:
+					var Starship = bufferStarship1.clone();
+					break;
+
+				}
+		    
+		    	ModelArray.push(new Fighter(Starship, Math.random() * 200 - 100, Math.random() * 200 - 100, -100,  TargetSpeed));
+		    }
+
+
+		    function BulletInit(ev) {
+		        Fire = true;
+		        BulletArray.push(new Bullet(CurrentX, CurrentY-10, CurrentZ, zBulletSpeed, CameraAngleX, CameraAngleY, CameraAngleX + Deg90));
+		        AudioFireArray[indexAudioFireArray].WavFile.play();
+		        ++indexAudioFireArray;
+		        if(indexAudioFireArray == 20){
+		        	indexAudioFireArray = 0;
+		        }
+		    }
+
+		    function StopFire() {
+		        Fire = false;
+		    }
+
+		    function OBJFileLoader (manager, path, mtlFile, objFile, scale, rotation) {
+				var buffer;
+		    	var mtlLoader = new THREE.MTLLoader();
+				mtlLoader.setPath( path );
+				mtlLoader.load( mtlFile, function( materials ) {
+					materials.preload();
+					var objLoader = new THREE.OBJLoader(manager);
+					objLoader.setMaterials( materials );
+					objLoader.setPath( path );
+					objLoader.load( objFile, function ( object ) {
+						object.position.y = 0;
+						object.scale.set( scale, scale, scale );
+						buffer = object;
+						buffer.rotation.y += rotation;					})
+				});
+				return buffer;
+		    }
+		    
+			function init() {
+				container = document.createElement( 'div' );
+				document.body.appendChild( container );
+				
+				var info = document.createElement( 'div' );
+				info.style.position = 'absolute';
+				info.style.top = '10px';
+				info.style.width = '100%';
+				info.style.textAlign = 'center';
+				container.appendChild( info );
+				
+				camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 50000 );
+				scene = new THREE.Scene();
+				var light = new THREE.AmbientLight( 0xffffff, 7 );
+				light.position.set( 10, 10, -10 ).normalize();
+				scene.add( light );
+
+								
+				var geometry   = new THREE.SphereGeometry(radius, 30, 30);
+				var material  = new THREE.MeshPhongMaterial();
+				material.map    = THREE.ImageUtils.loadTexture('Textures/earth.jpg')
+				earthMesh = new THREE.Mesh(geometry, material)
+				
+//				scene.add(earthMesh)
+				
+				var grid = new THREE.GridHelper( 10000, 100 );
+				grid.setColors( 0x010101, 0x010101 );
+				grid.position.y = -1000;
+				scene.add( grid );
+				
+				
+				var numStars = 5000;
+		        var radius = 20000;
+		        
+		        StarArray = [];
+
+		        geometry = new THREE.Geometry();
+		        for (i = 0; i < numStars; i++) {
+					var vertex = new THREE.Vector3();
+		            u = Math.random() * Math.PI * 2;
+		            v = Math.random() * Math.PI;
+		            vertex.y = Math.cos(u) * Math.sin(v) * radius;
+		            vertex.x = Math.sin(u) * Math.sin(v) * radius;
+		            vertex.z = Math.cos(v) * radius;
+					geometry.vertices.push( vertex );
+				}
+		        material = new THREE.PointsMaterial( {color: 0xffffff} );
+				Stars = new THREE.Points( geometry, material );
+				scene.add( Stars );
+		        
+				for (i=0; i < 20; i++){
+					var audioListenerFire = new THREE.AudioListener();
+					AudioFireArray.push( new AudioFile( 'Audio/photon2.wav', audioListenerFire, 0.5 ));
+				}
+				
+				for (i=0; i < 10; i++){
+					var audioListenerExplode = new THREE.AudioListener();
+					AudioExplodeArray.push( new AudioFile( 'Audio/Bomb2.wav', audioListenerExplode, 1.0 ));
+				}
+				// model
+				
+				manager = new THREE.LoadingManager();
+				manager.onLoad = function () {
+				    console.log('all items loaded');
+					animate();
+				};
+				var onProgress = function ( xhr ) {
+					if ( xhr.lengthComputable ) {
+						var percentComplete = xhr.loaded / xhr.total * 100;
+						console.log( Math.round(percentComplete, 2) + '% downloaded' );
+					}
+				};
+				
+				
+				var onError = function ( xhr ) { };
+				THREE.Loader.Handlers.add( /\.dds$/i, new THREE.DDSLoader() );
+
+
+				var mtlLoader1 = new THREE.MTLLoader();
+				mtlLoader1.setPath( 'Models/SpaceFighter01/' );
+				mtlLoader1.load( 'SpaceFighter01.mtl', function( materials ) {
+					materials.preload();
+					var objLoader1 = new THREE.OBJLoader(manager);
+					objLoader1.setMaterials( materials );
+					objLoader1.setPath( 'Models/SpaceFighter01/' );
+					objLoader1.load( 'SpaceFighter01.obj', function ( object ) {
+						object.position.y = 0;
+						object.scale.set( 0.1, 0.1, 0.1 );
+						bufferStarship1 = object;
+						bufferStarship1.rotation.y -= 9.38 * Math.PI / 180;
+						
+					})
+				});
+
+				bufferStarship1 = OBJFileLoader( manager, 'Models/SpaceFighter02/', 'SpaceFighter02.mtl', 'SpaceFighter02.obj', 0.1, 9.38 * Math.PI / 180 )
+
+				var mtlLoader2 = new THREE.MTLLoader();
+				mtlLoader2.setPath( 'Models/SpaceFighter02/' );
+				mtlLoader2.load( 'SpaceFighter02.mtl', function( materials ) {
+					materials.preload();
+					var objLoader2 = new THREE.OBJLoader(manager);
+					objLoader2.setMaterials( materials );
+					objLoader2.setPath( 'Models/SpaceFighter02/' );
+					objLoader2.load( 'SpaceFighter02.obj', function ( object ) {
+						object.position.y = 0;
+						object.scale.set( 0.1, 0.1, 0.1 );
+						bufferStarship2 = object;
+					})
+				});
+				
+				var mtlLoader3 = new THREE.MTLLoader();
+				mtlLoader3.setPath( 'Models/SpaceFighter03/' );
+				mtlLoader3.load( 'SpaceFighter03.mtl', function( materials ) {
+					materials.preload();
+					var objLoader3 = new THREE.OBJLoader(manager);
+					objLoader3.setMaterials( materials );
+					objLoader3.setPath( 'Models/SpaceFighter03/' );
+					objLoader3.load( 'SpaceFighter03.obj', function ( object ) {
+						object.position.y = 0;
+						object.scale.set( 2.0, 2.0, 2.0 );
+						bufferStarship3 = object;
+					})
+				});
+				
+				
+				
+		        Rotation[0] = 0;
+		        Rotation[1] = 0;
+		        Rotation[2] = 0;
+		        
+		        ThrustVector[0] = 0;
+		        ThrustVector[1] = 0;
+		        ThrustVector[2] = 0;
+							
+				raycaster = new THREE.Raycaster();
+				renderer = new THREE.WebGLRenderer();
+				renderer.setClearColor( 0x000000 );
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				renderer.sortObjects = false;
+				container.appendChild(renderer.domElement);
+				stats = new Stats();
+				container.appendChild( stats.dom );
+				document.addEventListener( 'keydown', handleKeyDown, false );
+				document.addEventListener( 'keyup', handleKeyUp, false );
+				document.addEventListener( 'mousemove', handleMouseMove, false );
+				document.addEventListener( 'mousedown', BulletInit, false );
+				document.addEventListener( 'mouseup', StopFire, false );
+				
+				document.body.style.cursor='crosshair';
+
+				//
+				window.addEventListener( 'resize', onWindowResize, false );
+				
+
+			}
+			function onWindowResize() {
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+				renderer.setSize( window.innerWidth, window.innerHeight );
+			}
+			function onDocumentMouseMove( event ) {
+				event.preventDefault();
+				mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+				mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+			}
+			//
+			function animate() {
+				requestAnimationFrame( animate );
+				
+	            if (!Pause) {
+	                CameraAngleY += CurserX * 0.00005;
+	                CameraAngleX -= CurserY * 0.00005;
+	            }	            
+				camera.position.x = CurrentX;
+				camera.position.y = CurrentY;
+				camera.position.z = CurrentZ;				
+				earthMesh.rotation.y += .005;
+				handleKeys();
+				RotationCalc();
+				ThrustCalc();
+
+
+	            if (TargetGenRateCount > 60 / TargetGenRate) {
+	                TargetInit();
+	                TargetGenRateCount = 0;
+	            }
+	            TargetGenRateCount++;				
+				
+				i = 0;
+	           while (ModelArray[i] != null) {
+	                ModelArray[i].animate();
+	                if ((ModelArray[i].model.position.z < TargetLife) || (ModelArray[i].explodeCounter <= 1)) {
+
+	                	scene.remove( ModelArray[i].model );
+	                	var temp = ModelArray.splice( i, 1 );
+	                    delete temp;
+	                    i--;
+	                }
+	                i++;
+	            }
+
+	            if (Fire) {
+	                if ((BulletFireRateCount) > (60 / BulletFireRate)) {
+	                    BulletInit();
+	                    BulletFireRateCount = 0;
+	                }
+	                BulletFireRateCount++;
+	            }
+	            
+	            
+	            i = 0;
+	            while (BulletArray[i] != null) {
+	                BulletArray[i].animate();
+
+	                if ((Math.abs(BulletArray[i].range) > BulletLife) && (BulletArray[i] != null)) {
+	                    scene.remove( BulletArray[i].model );
+	                    var temp = BulletArray.splice(i, 1);
+	                    delete temp;
+	                    i--;
+	                }
+
+	                j = 0;
+	                while ((ModelArray[j] != null) && (BulletArray[i] != null)) {
+	                    if ((BulletArray[i].model.position.z > ModelArray[j].model.position.z  - ModelArray[j].bbox.scale.z ) &&
+	                   (BulletArray[i].model.position.z < ModelArray[j].model.position.z + ModelArray[j].bbox.scale.z ) &&
+	                   (BulletArray[i].model.position.x > ModelArray[j].model.position.x - ModelArray[j].bbox.scale.x ) &&
+	                   (BulletArray[i].model.position.x < ModelArray[j].model.position.x + ModelArray[j].bbox.scale.x ) &&
+	                   (BulletArray[i].model.position.y > ModelArray[j].model.position.y - ModelArray[j].bbox.scale.y ) &&
+	                   (BulletArray[i].model.position.y < ModelArray[j].model.position.y + ModelArray[j].bbox.scale.y )) {
+	    //                    color = [Math.random() / 2 + 0.5, Math.random() / 2 + 0.5, Math.random() / 2 + 0.5, 0.5];
+	        		        AudioExplodeArray[indexAudioExplodeArray].WavFile.play();
+	        		        ++indexAudioExplodeArray;
+	        		        if(indexAudioExplodeArray == 10){
+	        		        	indexAudioExplodeArray = 0;
+	        		        }
+	                    	ExplodeArray.push(new Explode(ModelArray[j].model.position.x , ModelArray[j].model.position.y, ModelArray[j].model.position.z , ModelArray[j].speed, ModelArray[j].model.scale ));
+	                        ModelArray[j].explode = true;
+//	                        scene.remove( ModelArray[j].model );
+	                        var temp = BulletArray.splice(i, 1);
+	                        delete temp;
+	                        i--;
+	                    }
+	                    j++;
+	                }
+
+	                i++;
+	            }
+	            
+	            i = 0;
+	            while (ExplodeArray[i] != null) {
+	                ExplodeArray[i].Z += ExplodeArray[i].speed;
+	                ExplodeArray[i].time += .005;
+
+	                
+	                ExplodeArray[i].update();
+
+	                if (ExplodeArray[i].time >= 0.2) {
+	                	scene.remove( ExplodeArray[i].model );
+	                	var temp = ExplodeArray.splice(i, 1);
+	                    delete temp;   
+	                    i--;
+	                }
+	            i++;
+	            }
+	            
+				render();
+				stats.update();
+			}
+			
+			function render() {
+				theta += 0.1;
+
+				camera.rotation.order = 'YXZ';
+				camera.rotation.set ( CameraAngleX, CameraAngleY, CameraAngleZ );
+				camera.updateProjectionMatrix();
+				renderer.render( scene, camera );
+			}
+			
+			function RotationCalc() {
+	           if (Rotation[0] != 0) {
+	                if (Rotation[0] > 0) {
+	                    Rotation[0] -= RotationDragRate;
+	                }
+
+	                if (Rotation[0] < 0) {
+	                    Rotation[0] += RotationDragRate;
+	                }
+
+	                if (Math.abs(Rotation[0]) < RotationDragRate) {
+	                    Rotation[0] = 0;
+	                }
+	                CameraAngleX += Rotation[0];
+	            }
+
+	            if (Rotation[1] != 0) {
+	                if (Rotation[1] > 0) {
+	                    Rotation[1] -= RotationDragRate;
+	                }
+
+	                if (Rotation[1] < 0) {
+	                    Rotation[1] += RotationDragRate;
+	                }
+
+	                if (Math.abs(Rotation[1]) < RotationDragRate) {
+	                    Rotation[1] = 0
+	                }
+	                CameraAngleY += Rotation[1];
+
+	            }
+
+	            if ((Rotation[2] != 0) && !(currentlyPressedKeys[37])) {
+	                if (Rotation[2] < 0) {
+	                    Rotation[2] += ZChangeRate;
+	                }
+
+	                if ((Rotation[2] > 0)  && !(currentlyPressedKeys[39])) {
+	                    Rotation[2] -= ZChangeRate;
+	                }
+
+	                if (Math.abs(Rotation[2]) < ZChangeRate) {
+	                    Rotation[2] = 0;
+	                }
+	                CameraAngleZ = Rotation[2];
+
+	            }
+	            }
+			
+			function ThrustCalc() {
+	            if (ThrustVector[2] != 0) {
+
+	                y = Math.sin(ThrustVector[0]) * ThrustVector[2];
+	                x = Math.sin(ThrustVector[1]) * ThrustVector[2];
+	                z = Math.cos(ThrustVector[1]) * Math.sin((ThrustVector[0]) + Math.PI / 2) * ThrustVector[2];
+
+	                CurrentX += x;
+	                CurrentY -= y;
+	                CurrentZ += z;
+
+
+	                if (ThrustVector[2] > 0) {
+	                    ThrustVector[2] -= DragRate;
+	                }
+
+	                if (ThrustVector[2] < 0) {
+	                    ThrustVector[2] += DragRate;
+	                }
+
+	                if (Math.abs(ThrustVector[2]) < DragRate) {
+	                    ThrustVector[2] = 0;
+	                }
+	            }
+		
+			}
+			
+			function handleKeys() {
+
+
+				
+				if (currentlyPressedKeys[37]) {
+		            // Left cursor key
+		            if (Rotation[1] < MaxRotation) {
+		                CameraAngleY += XYChangeRate;
+		                Rotation[1] += XYChangeRate;
+		            }
+		        }
+
+		        if (currentlyPressedKeys[39]) {
+		            // Right cursor key
+		            if  (Rotation[1] > -MaxRotation) {
+		                CameraAngleY -= XYChangeRate;
+		                Rotation[1] -= XYChangeRate;
+		            }
+
+		        }
+		        if ((currentlyPressedKeys[38]) && (Rotation[0] < MaxRotation)) {
+		            // Up cursor key
+		            CameraAngleX += XYChangeRate;
+		            Rotation[0] += XYChangeRate;
+		        }
+		        if ((currentlyPressedKeys[40]) && (Rotation[0] > -MaxRotation)) {
+		            // Down cursor key
+		            CameraAngleX -= XYChangeRate;
+		            Rotation[0] -= XYChangeRate;
+		        }
+		        if ((currentlyPressedKeys[83]) && (ThrustVector[2] > -MaxThrust))  {
+		            // Down "s" key
+		            ThrustVector[0] = CameraAngleX;
+		            ThrustVector[1] = CameraAngleY;
+		            ThrustVector[2] += 1;
+		        }
+
+		        if ((currentlyPressedKeys[87]) && (ThrustVector[2] < MaxThrust))  {
+		            // Down "w" key
+		            ThrustVector[0] = CameraAngleX;
+		            ThrustVector[1] = CameraAngleY;
+		            ThrustVector[2] -= 1;
+		        } 
+			}
+			
+		function handleKeyDown(ev) {
+			        currentlyPressedKeys[ev.keyCode] = true;
+
+			        if (ev.keyCode == 32) {
+			            // Space Bar
+			            if (Pause) {
+			                Pause = false;
+			            }
+			            else {
+			                Pause = true;
+			            }
+			        }
+			  }
+			
+		function handleKeyUp(event) {
+			        currentlyPressedKeys[event.keyCode] = false;
+			    }
+		
+		 function handleMouseMove(ev) {
+			 
+		        CurserX =  window.innerWidth/2 - ev.clientX;
+		        CurserY = ev.clientY - window.innerHeight/2;
+
+		    }
+
+		</script>
+
+	</body>
+</html>
